@@ -1,0 +1,9 @@
+# Credenciales: NUNCA se suben
+.env
+
+# Entorno virtual de Python
+.venv/
+
+# Archivos que genera Python solo
+__pycache__/
+*.pyc
