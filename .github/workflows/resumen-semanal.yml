@@ -1,0 +1,31 @@
+# Ejecuta weekly_summary.py en los servidores de GitHub, sin que nadie lo dispare a mano.
+# Las credenciales NO están en el código: se cargan como "secrets" en la configuración
+# del repositorio (Settings -> Secrets and variables -> Actions).
+
+name: Resumen semanal
+
+on:
+  schedule:
+    - cron: "0 12 * * 1"   # todos los lunes a las 12:00 UTC = 9:00 en Argentina
+  workflow_dispatch:        # además, permite ejecutarlo a mano desde la pestaña Actions (para probar)
+
+jobs:
+  enviar-resumen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código del repositorio
+        uses: actions/checkout@v5
+
+      - name: Instalar Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Enviar resúmenes
+        run: python weekly_summary.py
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
