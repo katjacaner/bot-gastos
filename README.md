@@ -18,10 +18,14 @@ GitHub Actions ──► weekly_summary.py ──► resumen de los lunes por Te
 
 | Mensaje | Respuesta del bot |
 |---|---|
-| `gasté 39000 en bolt` | ✅ Guardado: $39.000 en transporte (Bolt) |
-| `gaste 12000 en la despensa` | ✅ Guardado: $12.000 en supermercado |
+| `gasté 39000 en bolt` | ¿Guardo este gasto? 💰 $39.000 · 🏷 transporte · [✅ Confirmar] [❌ Cancelar] |
+| *(editás tu mensaje a "3900")* | Actualiza la misma propuesta a 💰 $3.900 |
+| *(tocás ✅ Confirmar)* | ✅ Guardado: $3.900 en transporte (Bolt) |
 | `hola` | 🤔 Eso no parece un gasto |
 | `/resumen` | 📊 Total por categoría de los últimos 7 días |
+
+Nada se guarda hasta confirmarlo: si la IA entendió mal o hubo un error de tipeo, se
+corrige editando el mensaje original.
 
 ## Stack
 
@@ -41,6 +45,9 @@ GitHub Actions ──► weekly_summary.py ──► resumen de los lunes por Te
   (20 consultas/día en algunos) y devuelve 503 cuando está saturada. El código prueba una
   lista de modelos en orden y pasa al siguiente ante 429/503/404, en lugar de reintentar
   sobre un cupo ya agotado.
+- **Confirmación antes de guardar.** Los gastos quedan pendientes en memoria hasta que el
+  usuario toca ✅; editar el mensaje original recalcula la propuesta. Un gasto se retira de
+  pendientes en el mismo paso en que se confirma, así un doble toque no lo duplica.
 - **Consultas parametrizadas** (`%s`) en todo el SQL, para evitar inyección SQL.
 - **Credenciales fuera del código:** `.env` local (ignorado por Git) y *secrets* de GitHub
   para la automatización. Los logs de `httpx` se silencian porque sus URLs incluyen el token.
