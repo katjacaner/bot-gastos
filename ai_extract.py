@@ -11,10 +11,12 @@ from google.genai import errors, types
 
 load_dotenv()
 
-# Alias que Google mantiene apuntando al modelo Flash vigente (los nombres con versión se retiran).
-MODELO = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
-INTENTOS = 3  # si Google está saturado, probamos hasta 3 veces antes de rendirnos
-MONTO_MAXIMO =Decimal("9999999999.99")  # el máximo que entra en NUMERIC(12, 2)
+# Modelos a probar, en orden. Son alias que Google mantiene apuntando a la versión vigente
+# (los nombres con número, como "gemini-2.5-flash", se retiran con el tiempo).
+# En la capa gratuita cada modelo tiene su propio cupo diario: si uno se agota o está
+# saturado, pasamos al siguiente. Se puede cambiar con GEMINI_MODELS=modelo1,modelo2 en el .env.
+MODELOS = os.getenv("GEMINI_MODELS", "gemini-flash-lite-latest,gemini-flash-latest").split(",")
+MONTO_MAXIMO = Decimal("9999999999.99")  # el máximo que entra en NUMERIC(12, 2)
 
 PROMPT = """Sos un asistente que registra gastos personales en pesos argentinos.
 Leé el mensaje del usuario y respondé SOLO con un objeto JSON con estas claves:
@@ -34,25 +36,33 @@ class ErrorExtraccion(Exception):
 def extraer_gasto(texto, categorias):
     """Devuelve {"monto": Decimal, "categoria": str, "descripcion": str} o lanza ErrorExtraccion."""
     cliente = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    for intento in range(1, INTENTOS + 1):
-        try:
-            respuesta = cliente.models.generate_content(
-                model=MODELO,
-                contents=PROMPT.format(categorias=", ".join(categorias), texto=texto),
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",  # le pedimos JSON...
-                    temperature=0,                          # ...y respuestas lo más predecibles posible
-                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-                ),
-            )
-            return validar(respuesta.text, categorias)
-        except errors.APIError as e:
-            # 429 = demasiadas consultas seguidas; 500/503 = Google saturado. Son pasajeros: reintentamos.
-            if e.code in (429, 500, 503) and intento < INTENTOS:
-                time.sleep(5 * intento)  # esperamos cada vez un poco más: 5s, 10s...
-                continue
-            # Key inválida, modelo inexistente, o se agotaron los reintentos.
-            raise ErrorExtraccion(f"No pude consultar a la IA ({e.code}). Probá de nuevo en un rato.")
+    ultimo_codigo = None
+    for modelo in MODELOS:
+        for intento in (1, 2):
+            try:
+                respuesta = cliente.models.generate_content(
+                    model=modelo.strip(),
+                    contents=PROMPT.format(categorias=", ".join(categorias), texto=texto),
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",  # le pedimos JSON...
+                        temperature=0,                          # ...y respuestas lo más predecibles posible
+                        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+                    ),
+                )
+                return validar(respuesta.text, categorias)
+            except errors.APIError as e:
+                ultimo_codigo = e.code
+                if e.code in (500, 503) and intento == 1:
+                    time.sleep(3)  # Google saturado: suele ser pasajero, reintentamos una vez
+                    continue
+                if e.code in (404, 429, 500, 503):
+                    break  # modelo retirado (404), cupo agotado (429) o sigue saturado: probamos el siguiente
+                # Cualquier otro error (key inválida, etc.) no se arregla cambiando de modelo.
+                raise ErrorExtraccion(f"No pude consultar a la IA ({e.code}).")
+
+    if ultimo_codigo == 429:
+        raise ErrorExtraccion("Se agotó el cupo gratuito de la IA por hoy. Probá de nuevo mañana.")
+    raise ErrorExtraccion(f"No pude consultar a la IA ({ultimo_codigo}). Probá de nuevo en un rato.")
 
 
 def validar(texto_json, categorias):
